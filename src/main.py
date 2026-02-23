@@ -44,34 +44,15 @@ def main():
                                 batch_size=args.batch_size, device=device)
         clients.append(client)
 
+    from src.algorithms import run_sfl_round
+    
     # 3. Simulation Loop
     print("Starting Training Simulation...")
     for epoch in range(args.epochs):
-        epoch_loss = 0.0
-        
-        # In SplitFed v1, clients might train sequentially or in parallel. 
-        # Here we simulate sequentially for simplicity.
-        for client in clients:
-            # Client forward pass to cut layer
-            smashed_data, labels = client.forward_pass()
+        # We simulate the SFL-V1 process utilizing the external algorithm file
+        avg_loss = run_sfl_round(clients, server)
             
-            # Server forward + loss + backward to cut layer
-            grad_to_client, loss = server.train_step(smashed_data, labels)
-            epoch_loss += loss
-            
-            # Client receives gradients and completes backward pass
-            client.backward_pass(grad_to_client)
-            
-        print(f"Epoch {epoch+1}/{args.epochs} - Loss: {epoch_loss/args.num_clients:.4f}")
-        
-        # After an epoch (or some rounds), aggregate client models (e.g. SFL-V1/V2 differences)
-        print("Aggregating client models...")
-        client_weights = [c.get_weights() for c in clients]
-        global_client_weights = server.aggregate_client_models(client_weights)
-        
-        # Broadcast back to clients
-        for client in clients:
-            client.set_weights(global_client_weights)
+        print(f"Epoch {epoch+1}/{args.epochs} - Loss: {avg_loss:.4f}")
 
     print("Training finished.")
 
