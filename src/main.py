@@ -19,13 +19,6 @@ def main():
     parser.add_argument("--attack_type", type=str, default="none", choices=["none", "pair_flip", "targeted", "backdoor"])
     parser.add_argument("--malicious_fraction", type=float, default=0.0, help="Fraction of clients to be malicious")
     
-    # Dynamic Attack Arguments
-    parser.add_argument("--dynamic_attack", action="store_true", help="Enable dynamic attack schedules")
-    parser.add_argument("--attack_pattern", type=str, default="always", choices=["always", "random", "cyclic", "periodic"])
-    parser.add_argument("--malicious_flip_prob", type=float, default=1.0)
-    parser.add_argument("--cyclic_attack_period", type=int, default=5)
-    parser.add_argument("--periodic_attack_interval", type=int, default=3)
-    
     # Backdoor Arguments
     parser.add_argument("--backdoor_poison_fraction", type=float, default=1.0)
     parser.add_argument("--backdoor_target_label", type=int, default=0)
@@ -70,11 +63,6 @@ def main():
 
     # Gather attack kwargs
     attack_kwargs = {
-        "dynamic_attack": args.dynamic_attack,
-        "attack_pattern": args.attack_pattern,
-        "malicious_flip_prob": args.malicious_flip_prob,
-        "cyclic_attack_period": args.cyclic_attack_period,
-        "periodic_attack_interval": args.periodic_attack_interval,
         "backdoor_poison_fraction": args.backdoor_poison_fraction,
         "backdoor_target_label": args.backdoor_target_label,
         "backdoor_source_labels": args.backdoor_source_labels,
@@ -98,15 +86,23 @@ def main():
 
     # Initialize clients with their own instantiations of the client model and partitioned data
     clients = []
+    from src.data.poisoned_dataset import PoisonedDataset
+    
     for i in range(args.num_clients):
         # We start them with the same initial weights
         import copy
         c_model = copy.deepcopy(client_model_template)
         is_mal = i in malicious_clients_indices
-        client = SplitFedClient(client_id=i, model=c_model, dataset=client_datasets[i], 
+        
+        c_dataset = client_datasets[i]
+        if is_mal and args.attack_type != "none":
+            c_dataset = PoisonedDataset(c_dataset, attack_type=args.attack_type, 
+                                        attack_kwargs=attack_kwargs, dataset_name=args.dataset,
+                                        seed=42 + i)
+            
+        client = SplitFedClient(client_id=i, model=c_model, dataset=c_dataset, 
                                 batch_size=args.batch_size, lr=args.lr, device=device,
-                                is_malicious=is_mal, attack_type=args.attack_type, 
-                                attack_kwargs=attack_kwargs, dataset_name=args.dataset)
+                                is_malicious=is_mal)
         clients.append(client)
 
     from src.algorithms import run_sfl_round
