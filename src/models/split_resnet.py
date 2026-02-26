@@ -45,7 +45,7 @@ class ResNet18Server(nn.Module):
 class WideResNet50Client(nn.Module):
     def __init__(self, dataset="CIFAR100"):
         super().__init__()
-        resnet = wide_resnet50_2(weights=None)
+        resnet = wide_resnet50_2(weights="DEFAULT")
         
         if dataset in ["CIFAR10", "CIFAR100"]:
             resnet.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
@@ -65,7 +65,7 @@ class WideResNet50Client(nn.Module):
 class WideResNet50Server(nn.Module):
     def __init__(self, num_classes=100):
         super().__init__()
-        resnet = wide_resnet50_2(weights=None)
+        resnet = wide_resnet50_2(weights="DEFAULT")
         
         self.server_layers = nn.Sequential(
             resnet.layer2,
