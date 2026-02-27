@@ -6,9 +6,9 @@ class SplitFedServer:
     """
     Simulates the central server in a Split Federated Learning setup.
     """
-    def __init__(self, model, num_clients, lr=0.01, device='cpu', momentum=0.0, weight_decay=0.0):
+    def __init__(self, model, num_clients, lr=0.01, device='cpu'):
         self.model = model.to(device)
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
+        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr)
         self.criterion = nn.CrossEntropyLoss()
         self.device = device
         

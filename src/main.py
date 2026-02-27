@@ -14,9 +14,6 @@ def main():
     parser.add_argument("--lr", type=float, default=0.01, help="Learning rate for both server and clients")
     parser.add_argument("--dataset", type=str, default="MNIST", choices=["MNIST", "CIFAR10", "CIFAR100", "ImageNet"])
     parser.add_argument("--hf_token", type=str, default=None, help="Hugging Face access token for downloading datasets")
-    parser.add_argument("--momentum", type=float, default=0.0, help="Momentum for SGD")
-    parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay for SGD")
-    parser.add_argument("--lr_scheduler", type=str, default="none", choices=["none", "step", "cosine"], help="Learning rate scheduler")
     
     # Attack Configuration
     parser.add_argument("--attack_type", type=str, default="none", choices=["none", "pair_flip", "targeted", "backdoor"])
@@ -53,7 +50,7 @@ def main():
     from src.models.split import get_split_models
     client_model_template, server_model = get_split_models(args.dataset)
 
-    server = SplitFedServer(model=server_model, num_clients=args.num_clients, lr=args.lr, device=device, momentum=args.momentum, weight_decay=args.weight_decay)
+    server = SplitFedServer(model=server_model, num_clients=args.num_clients, lr=args.lr, device=device)
 
     # Pre-parse label pairs
     label_pairs = []
@@ -105,22 +102,10 @@ def main():
             
         client = SplitFedClient(client_id=i, model=c_model, dataset=c_dataset, 
                                 batch_size=args.batch_size, lr=args.lr, device=device,
-                                is_malicious=is_mal, momentum=args.momentum, weight_decay=args.weight_decay)
+                                is_malicious=is_mal)
         clients.append(client)
 
     from src.algorithms import run_sfl_round
-
-    # Initialize schedulers
-    client_schedulers = []
-    server_scheduler = None
-    if args.lr_scheduler == "step":
-        server_scheduler = torch.optim.lr_scheduler.StepLR(server.optimizer, step_size=50, gamma=0.1)
-        for c in clients:
-            client_schedulers.append(torch.optim.lr_scheduler.StepLR(c.optimizer, step_size=50, gamma=0.1))
-    elif args.lr_scheduler == "cosine":
-        server_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(server.optimizer, T_max=args.epochs)
-        for c in clients:
-            client_schedulers.append(torch.optim.lr_scheduler.CosineAnnealingLR(c.optimizer, T_max=args.epochs))
     from src.algorithms.evaluate import (
         evaluate_accuracy, 
         evaluate_backdoor_asr, 
@@ -142,11 +127,6 @@ def main():
     for epoch in range(args.epochs):
         # We simulate the SFL-V1 process utilizing the external algorithm file
         train_loss, train_acc = run_sfl_round(clients, server)
-        
-        if server_scheduler:
-            server_scheduler.step()
-        for sched in client_schedulers:
-            sched.step()
         
         # Evaluate on the test set using the latest global weights (from client 0)
         eval_client = clients[0].model

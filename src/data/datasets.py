@@ -60,14 +60,12 @@ def get_datasets(dataset_name="MNIST", data_dir="./data", hf_token=None):
         
     elif dataset_name == "CIFAR100":
         transform_train = transforms.Compose([
-            transforms.Resize(224),
-            transforms.RandomCrop(224, padding=4),
+            transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
         transform_test = transforms.Compose([
-            transforms.Resize(224),
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
