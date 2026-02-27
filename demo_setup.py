@@ -418,7 +418,7 @@ with torch.no_grad():
                 state.global_centroids[lbl] = c[lbl]
 
 
-# In[7]:
+# In[ ]:
 
 
 import matplotlib.pyplot as plt

@@ -219,8 +219,6 @@ def run_sfl_centinel_round(
       ✅ Device placement consistent (data/targets/centroids on same device)
       ✅ No O(n) next(...) label lookup; uses dict map
       ✅ Returns (avg_loss, avg_acc, scores_dict, accepted_ids)
-      ✅ Avoids ambiguous server aggregation calls: keeps only client-side FedAvg broadcast
-         (server stays as a single shared model trained by accepted clients)
     """
     server.model.to(device)
     for sm in server.models:
@@ -330,6 +328,9 @@ def run_sfl_centinel_round(
 
     for client in clients:
         client.set_weights(global_client_weights)
+
+    # Aggregate server side models for accepted clients
+    server.aggregate_server_models(active_client_indices=list(accepted_ids))
 
     # ---------------------------------------------------------
     # Step F: Refresh reference centroids using updated client model (clients[0])
