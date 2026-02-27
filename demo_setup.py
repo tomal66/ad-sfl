@@ -56,7 +56,7 @@ if req.exists():
     subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(req)], check=True)
 
 
-# In[1]:
+# In[2]:
 
 
 import torch
@@ -72,7 +72,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # ### Step 1: Load and Partition Data
 
-# In[2]:
+# In[3]:
 
 
 # --- HYPERPARAMETERS & REPRODUCIBILITY ---
@@ -118,7 +118,7 @@ client_datasets = partition_data_dirichlet(train_data, num_clients, alpha=DIRICH
 # 
 # In SplitFed, a portion of the network is on the client, and the rest is on the server.
 
-# In[ ]:
+# In[4]:
 
 
 import copy
@@ -152,7 +152,7 @@ print(f"Initialized 1 Server and {num_clients} Clients.")
 print(f"Injected '{ATTACK_TYPE}' into {len(malicious_clients_indices)} malicious clients: {malicious_clients_indices}")
 
 
-# In[ ]:
+# In[5]:
 
 
 import torch
@@ -186,7 +186,7 @@ print(format_counts("COMBINED", combined_counts))
 
 # ### Step 3: Simulation Loop
 
-# In[ ]:
+# In[6]:
 
 
 import matplotlib.pyplot as plt
@@ -245,7 +245,7 @@ for r in pbar:
 
 
 
-# In[ ]:
+# In[7]:
 
 
 print("Training simulation complete. Plotting accuracy...")
@@ -265,7 +265,7 @@ plt.show()
 # 
 # Optionally, you can run the `sfl_gold` algorithm which completely ignores malicious clients during training and aggregation, establishing an upper bound performance.
 
-# In[ ]:
+# In[8]:
 
 
 import matplotlib.pyplot as plt
@@ -338,7 +338,7 @@ for r in pbar:
 
 
 
-# In[ ]:
+# In[9]:
 
 
 print("Training simulation complete. Plotting accuracy...")
@@ -358,7 +358,7 @@ plt.show()
 # 
 # This section evaluates the Centinel defense method, which uses anomaly detection on activation centroids and Subjective Logic to build client reputations over time.
 
-# In[ ]:
+# In[10]:
 
 
 from src.algorithms.centinel import run_sfl_centinel_round, CentinelState
@@ -376,9 +376,10 @@ kappa = 0.7
 zeta = 0.3
 
 # Build a small, class-balanced reference dataset from the test set
-labels = np.array(test_data['label'])
+labels = np.array(test_data.hf_dataset[test_data.label_key])
 ref_indices = []
-for c in range(10): # CIFAR10 has 10 classes
+num_classes = len(np.unique(labels))
+for c in range(num_classes):
     c_indices = np.where(labels == c)[0]
     ref_indices.extend(np.random.choice(c_indices, NUM_REF_SAMPLES_PER_LABEL, replace=False))
 
