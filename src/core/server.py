@@ -59,20 +59,29 @@ class SplitFedServer:
 
         return grad_to_client, loss.item(), accuracy
 
-    def aggregate_server_models(self):
+    def aggregate_server_models(self, active_client_indices=None):
         """
         Performs Federated Averaging (FedAvg) on the server side models.
         Updates the global server model and synchronizes all client-specific server models.
+        Optionally takes a list of client indices to aggregate over (defaulting to all).
         """
-        global_state = copy.deepcopy(self.models[0].state_dict())
+        if active_client_indices is None:
+            active_client_indices = list(range(self.num_clients))
+            
+        num_active = len(active_client_indices)
+        if num_active == 0:
+            return
+
+        first_index = active_client_indices[0]
+        global_state = copy.deepcopy(self.models[first_index].state_dict())
         for key in global_state.keys():
-            for i in range(1, self.num_clients):
+            for i in active_client_indices[1:]:
                 global_state[key] += self.models[i].state_dict()[key]
             
             if global_state[key].dtype.is_floating_point:
-                global_state[key] = torch.div(global_state[key], self.num_clients)
+                global_state[key] = torch.div(global_state[key], num_active)
             else:
-                global_state[key] = torch.div(global_state[key], self.num_clients, rounding_mode='trunc')
+                global_state[key] = torch.div(global_state[key], num_active, rounding_mode='trunc')
                 
         self.model.load_state_dict(global_state)
         for m in self.models:
