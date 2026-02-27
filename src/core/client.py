@@ -7,7 +7,7 @@ class SplitFedClient:
     Simulates a client in a Split Federated Learning setup.
     """
     def __init__(self, client_id, model, dataset, batch_size=32, lr=0.01, device='cpu', 
-                 is_malicious=False):
+                 is_malicious=False, momentum=0.0, weight_decay=0.0):
         self.id = client_id
         self.model = model.to(device)
         self.dataloader = DataLoader(
@@ -18,7 +18,7 @@ class SplitFedClient:
             pin_memory=True,
             persistent_workers=True
         )
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr)
+        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
         self.device = device
         
         # Attack identifier (logging only, poisoning happens natively in self.dataloader)
