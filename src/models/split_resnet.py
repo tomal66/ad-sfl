@@ -46,18 +46,13 @@ class ResNet18Server(nn.Module):
 # WideResNet50_2 (FIXED for Split Learning)
 # -----------------------
 def build_wide_resnet50_2_backbone(dataset="CIFAR100", weights="DEFAULT"):
-    """
-    Creates ONE backbone model to be split into client/server.
-    """
     if weights == "DEFAULT":
         weights = Wide_ResNet50_2_Weights.DEFAULT
     elif weights is None or weights == "NONE":
         weights = None
-    # else: user passed actual weights enum
 
     backbone = wide_resnet50_2(weights=weights)
 
-    # CIFAR: 32x32 -> use 3x3 stride1 conv and remove maxpool
     if dataset in ["CIFAR10", "CIFAR100"]:
         backbone.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
         backbone.maxpool = nn.Identity()
@@ -85,7 +80,8 @@ class WideResNet50Client(nn.Module):
 
 class WideResNet50Server(nn.Module):
     """
-    Server takes the SAME shared backbone instance and attaches your dropout-heavy MLP head.
+    Server takes the SAME shared backbone instance and attaches a paper-aligned classifier:
+    just one Linear layer (replace final layer only).
     """
     def __init__(self, backbone: nn.Module, num_classes=100):
         super().__init__()
@@ -96,21 +92,8 @@ class WideResNet50Server(nn.Module):
             backbone.avgpool
         )
 
-        in_ftrs = backbone.fc.in_features  # 2048
-
-        # Your ResNet50 training head structure (Dropout 0.5 + multiple linear + Dropout 0.2)
-        self.fc = nn.Sequential(
-            nn.Dropout(0.5),
-            nn.Linear(in_ftrs, 1024),
-            nn.Dropout(0.2),
-            nn.Linear(1024, 512),
-            nn.Dropout(0.2),
-            nn.Linear(512, 256),
-            nn.Dropout(0.2),
-            nn.Linear(256, 128),
-            nn.Dropout(0.2),
-            nn.Linear(128, num_classes),
-        )
+        in_ftrs = backbone.fc.in_features  # 2048 for wide_resnet50_2
+        self.fc = nn.Linear(in_ftrs, num_classes)
 
     def forward(self, x):
         x = self.server_layers(x)
