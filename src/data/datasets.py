@@ -15,6 +15,8 @@ class HFWrapperDataset(Dataset):
         return len(self.hf_dataset)
 
     def __getitem__(self, idx):
+        if not isinstance(idx, (int, slice)):
+            idx = int(idx)
         item = self.hf_dataset[idx]
         image = item[self.image_key]
         
