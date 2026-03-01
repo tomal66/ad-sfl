@@ -50,7 +50,7 @@ class ServerModel(nn.Module):
         return x
 
 def get_split_models(dataset_name, num_classes=None, weights="DEFAULT"):
-    from .split_resnet import ResNet18Client, ResNet18Server, build_wideresnet50_split
+    from .split_resnet import ResNet18Client, ResNet18Server, build_wideresnet50_split, build_resnet18_tiny_split
     
     if dataset_name == "MNIST":
         client_model = ClientModel(in_channels=1, hidden_channels=32)
@@ -71,10 +71,11 @@ def get_split_models(dataset_name, num_classes=None, weights="DEFAULT"):
             weights=weights
         )
     elif dataset_name == "TinyImageNet":
-        client_model, server_model = build_wideresnet50_split(
-            dataset=dataset_name, 
-            num_classes=num_classes or 200, 
-            weights="NONE"
+        # weights options: "IMAGENET_PARTIAL" (recommended), "NONE"
+        tiny_weights = "IMAGENET_PARTIAL" if weights == "DEFAULT" else weights
+        client_model, server_model = build_resnet18_tiny_split(
+            num_classes=num_classes or 200,
+            weights=tiny_weights
         )
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")

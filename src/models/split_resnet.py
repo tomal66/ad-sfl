@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torchvision.models import resnet18, wide_resnet50_2, Wide_ResNet50_2_Weights
+from torchvision.models import resnet18, wide_resnet50_2, Wide_ResNet50_2_Weights, ResNet18_Weights
 
 class ResNet18Client(nn.Module):
     def __init__(self, dataset="CIFAR10"):
@@ -108,4 +108,91 @@ def build_wideresnet50_split(dataset="CIFAR100", num_classes=100, weights="DEFAU
     backbone = build_wide_resnet50_2_backbone(dataset=dataset, weights=weights)
     client = WideResNet50Client(backbone)
     server = WideResNet50Server(backbone, num_classes=num_classes)
+    return client, server
+
+
+# ============================================================
+# TinyImageNet: ResNet18 split with CIFAR-style stem + optional partial ImageNet preload
+# ============================================================
+
+def _resnet18_tiny_backbone(weights="IMAGENET_PARTIAL"):
+    """
+    Returns a ResNet18 backbone configured for 64x64 (TinyImageNet):
+      - conv1: 3x3 stride 1
+      - maxpool removed
+    If weights == "IMAGENET_PARTIAL": load ImageNet weights except conv1 and fc.
+    If weights in [None, "NONE"]: random init.
+    """
+    # Start with a no-weights model because we will load selectively
+    backbone = resnet18(weights=None)
+
+    # CIFAR-style stem (good for 64x64)
+    backbone.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+    backbone.maxpool = nn.Identity()
+
+    if weights == "IMAGENET_PARTIAL":
+        ref = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
+        sd = ref.state_dict()
+
+        # Remove incompatible keys (conv1 differs; fc will be replaced anyway)
+        sd.pop("conv1.weight", None)
+        sd.pop("fc.weight", None)
+        sd.pop("fc.bias", None)
+
+        # Load everything else
+        backbone.load_state_dict(sd, strict=False)
+
+    elif weights in [None, "NONE", "RANDOM"]:
+        pass
+    else:
+        raise ValueError(f"Unknown weights option for TinyImageNet ResNet18: {weights}")
+
+    return backbone
+
+
+class ResNet18TinyClient(nn.Module):
+    """
+    Client: stem + layer1
+    """
+    def __init__(self, backbone: nn.Module):
+        super().__init__()
+        self.client_layers = nn.Sequential(
+            backbone.conv1,
+            backbone.bn1,
+            backbone.relu,
+            backbone.maxpool,   # Identity
+            backbone.layer1
+        )
+
+    def forward(self, x):
+        return self.client_layers(x)
+
+
+class ResNet18TinyServer(nn.Module):
+    """
+    Server: layer2..avgpool + fc
+    """
+    def __init__(self, backbone: nn.Module, num_classes=200):
+        super().__init__()
+        self.server_layers = nn.Sequential(
+            backbone.layer2,
+            backbone.layer3,
+            backbone.layer4,
+            backbone.avgpool
+        )
+        self.fc = nn.Linear(backbone.fc.in_features, num_classes)
+
+    def forward(self, x):
+        x = self.server_layers(x)
+        x = torch.flatten(x, 1)
+        return self.fc(x)
+
+
+def build_resnet18_tiny_split(num_classes=200, weights="IMAGENET_PARTIAL"):
+    """
+    Returns (client, server) from ONE shared ResNet18 backbone configured for TinyImageNet.
+    """
+    backbone = _resnet18_tiny_backbone(weights=weights)
+    client = ResNet18TinyClient(backbone)
+    server = ResNet18TinyServer(backbone, num_classes=num_classes)
     return client, server
