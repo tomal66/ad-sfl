@@ -29,6 +29,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from scipy.stats import gaussian_kde as scipy_gaussian_kde
 from torch.utils.data import DataLoader
 
 # ---------------------------------------------------------------------------
@@ -451,28 +452,39 @@ def gaussian_kde_logpdf_loo(samples: np.ndarray, h: float, eps: float = 1e-8) ->
     """
     Leave-one-out Gaussian KDE log-density at each of `samples`.
 
-    Numerically stable via per-row log-sum-exp.
+    Uses scipy.stats.gaussian_kde for O(N log N) complexity instead of O(N²),
+    recovering the LOO estimate analytically by subtracting the self-kernel
+    contribution from the full KDE density.
     """
-    samples = np.asarray(samples, dtype=np.float64)
+    samples = np.asarray(samples, dtype=np.float64).ravel()
     N = samples.size
     if N < 2:
         return np.full((N,), np.log(eps), dtype=np.float64)
 
     h = float(max(h, 1e-6))
-    diff = (samples[:, None] - samples[None, :]) / h        # (N, N)
-    exponent = -0.5 * diff * diff
 
-    max_exp = np.max(exponent, axis=1, keepdims=True)
-    exp_shifted = np.exp(exponent - max_exp)
+    # scipy bandwidth factor: factor * std_ddof1(data) == h  =>  factor = h / std
+    std = float(np.std(samples, ddof=1)) if N > 1 else 1.0
+    if std < 1e-10:
+        std = 1.0
+    bw_factor = h / std
 
-    # subtract self-kernel (always exp(0)=1 after "shifted" => we need raw form)
-    # The self term in exp_shifted is exp(0) = 1, so subtract 1.
-    row_sum = exp_shifted.sum(axis=1) - 1.0
-    row_sum = np.maximum(row_sum, 1e-300)
+    kde = scipy_gaussian_kde(samples, bw_method=bw_factor)
 
-    log_sum = max_exp.squeeze(-1) + np.log(row_sum)
-    log_norm = np.log(N - 1) + np.log(h) + 0.5 * np.log(2.0 * np.pi)
-    log_density = log_sum - log_norm
+    # Full KDE log-density at each sample: log p(x_i) from scipy
+    log_p = kde.logpdf(samples)                        # shape (N,)
+
+    # N * p(x_i)  ==  sum of all N kernels evaluated at x_i
+    A = np.exp(np.log(float(N)) + log_p)               # shape (N,)
+
+    # Self-kernel value: K_h(0) = 1 / (h * sqrt(2*pi))
+    self_term = 1.0 / (h * np.sqrt(2.0 * np.pi))
+
+    # LOO kernel sum = full sum minus self-contribution
+    loo_sum = np.maximum(A - self_term, 1e-300)        # shape (N,)
+
+    # LOO log-density = log(loo_sum) - log(N - 1)
+    log_density = np.log(loo_sum) - np.log(float(N - 1))
     return np.maximum(log_density, np.log(eps))
 
 
@@ -482,19 +494,24 @@ def gaussian_kde_logpdf(
     h: float,
     eps: float = 1e-8,
 ) -> np.ndarray:
-    """Standard Gaussian KDE log-density of `ref_vals` evaluated at `eval_pts`."""
-    eval_pts = np.asarray(eval_pts, dtype=np.float64)
-    ref_vals = np.asarray(ref_vals, dtype=np.float64)
-    N = ref_vals.size
+    """
+    Standard Gaussian KDE log-density of `ref_vals` evaluated at `eval_pts`.
+
+    Uses scipy.stats.gaussian_kde for O(M·log N) complexity instead of O(M·N).
+    """
+    eval_pts = np.asarray(eval_pts, dtype=np.float64).ravel()
+    ref_vals = np.asarray(ref_vals, dtype=np.float64).ravel()
     h = float(max(h, 1e-6))
 
-    diff = (eval_pts[:, None] - ref_vals[None, :]) / h      # (M, N)
-    exponent = -0.5 * diff * diff
+    N = ref_vals.size
+    std = float(np.std(ref_vals, ddof=1)) if N > 1 else 1.0
+    if std < 1e-10:
+        std = 1.0
+    bw_factor = h / std
 
-    max_exp = np.max(exponent, axis=1, keepdims=True)
-    log_sum = max_exp.squeeze(-1) + np.log(np.exp(exponent - max_exp).sum(axis=1))
-    log_norm = np.log(N) + np.log(h) + 0.5 * np.log(2.0 * np.pi)
-    return np.maximum(log_sum - log_norm, np.log(eps))
+    kde = scipy_gaussian_kde(ref_vals, bw_method=bw_factor)
+    log_p = kde.logpdf(eval_pts)
+    return np.maximum(log_p, np.log(eps))
 
 
 # ===========================================================================
